@@ -1,12 +1,36 @@
 import pandas as pd
 import sqlite3
 import matplotlib.pyplot as plt
+import networkx as nx
+from bs4 import BeautifulSoup
+import ssl
+import urllib.request, urllib.parse, urllib.error
+from urllib.parse import urljoin
 
+
+# Ignore SSL certificate errors
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
+
+url = 'https://vincentarelbundock.github.io/Rdatasets/datasets.html'
+html = urllib.request.urlopen(url, context=ctx).read()
+soup = BeautifulSoup(html, 'html.parser')
+ 
+full_url = None  
+for link in soup.find_all('a', href=True):
+    if 'boot/melanoma.csv' in link['href']:
+        full_url = urljoin(url, link["href"])
+        print(full_url)
+
+if not full_url :
+    print('Error finding the melanoma dataset')
+    quit()
+df = pd.read_csv(full_url)
 #download the csv. We use panda for managing csv
-url = "https://vincentarelbundock.github.io/Rdatasets/csv/boot/melanoma.csv"
-df = pd.read_csv(url)
-
-print(df.head())
+#url = "https://vincentarelbundock.github.io/Rdatasets/csv/boot/melanoma.csv"
+#df = pd.read_csv(url)
+#print(df.head())
 #print(df['thickness'].max())
 #print(df.describe())
 #print(dir(pd)) 
@@ -19,7 +43,7 @@ cur = conn.cursor()
 
 cur.execute('''
 CREATE TABLE IF NOT EXISTS Melanoma (
-    id INTERGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
     status INTEGER,
     sex INTEGER,
     age INTEGER,
@@ -226,4 +250,46 @@ promedio = prom_hom, prom_muj
 for i, v in enumerate(promedio) :
     plt.text(i,v+0.02, v, ha='center', fontsize=12)
 plt.show()
+
+#Cloud de anios
+cur.execute('SELECT year, COUNT(*) FROM Melanoma GROUP BY year')
+# Convertimos directamente la consulta en un diccionario
+casos = dict(cur.fetchall())  
+
+#print(casos)
+#if not casos:
+ #   print("No hay datos disponibles en la base de datos.")
+  #  conn.close()
+   # quit()
+
+#plt.figure(figsize=(10, 6))
+#for anio, num_casos in casos.items() :
+#    plt.scatter(anio, 0, s=num_casos * 10, alpha=0.6, label=f'{anio} ({num_casos})')
+#    plt.text(anio, 0, str(anio), fontsize=9, ha='center')
+#plt.title('Casos de melanoma por anio')
+#plt.xlabel('Anio')
+#plt.yticks([])
+#plt.grid(axis='x', linestyle='--', alpha=0.6)
+#plt.show()
+
+# Crear el grafo
+G = nx.Graph()
+for anio, num_cas in casos.items() :
+    G.add_node(anio, size=num_cas)
+
+anios = sorted(casos.keys())
+for i in range(len(anios) -1):
+    G.add_edge(anios[i], anios[i+1])
+# Obtener tamaños de nodos basados en número de casos (ajustado para mejor visualización)
+node_sizes = [casos[anio] * 20 for anio in G.nodes()]
+
+# Dibujar el grafo
+plt.figure(figsize=(10, 6))
+pos = nx.spring_layout(G, seed=42)  # Algoritmo para distribuir nodos
+nx.draw(G, pos, with_labels=True, node_size=node_sizes, node_color='skyblue', edge_color='gray', font_size=10)
+
+plt.title("Red de años con casos de melanoma")
+plt.show()
+
+
 conn.close()
